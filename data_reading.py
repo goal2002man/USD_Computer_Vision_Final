@@ -11,6 +11,7 @@ Date: 7-12 Dec, 2022
 
 import numpy as np
 import cv2
+import os
 
 def parse_annotation(file_path):
     """
@@ -78,7 +79,7 @@ def list_convert(list):
 
     return converted_array
 
-def draw_boxes(boxes, image_path):
+def draw_boxes(boxes, img):
     """
     draw_boxes: a function to plot the annotation boxes onto an image
 
@@ -92,7 +93,7 @@ def draw_boxes(boxes, image_path):
     :param image_path:
     :return:
     """
-    img = cv2.imread(image_path)
+    # img = cv2.imread(image_path)
 
     for row in boxes:
         x, y, w, h = row
@@ -102,23 +103,171 @@ def draw_boxes(boxes, image_path):
 
     cv2.waitKey(0)
 
+def convert_image_and_annotation(source_path, file_name):
+    """
+    A function to resize the image and convert its annotation into YOYOv5-friendly format.
+
+    Input:
+        source_path (string): the path to the image and text annotation file, not including file name
+
+        file_name (string): name of the image file
+
+    Output:
+        crop (cv2 image): Cropped image centered on the main detection box for 'Car'
+        cent_boxes (array): Array of the centered boxes for Car, Plate and Characters,
+            sized for the new cropped image
+    """
+
+    img_path = source_path + file_name
+
+    # read in original image
+    img = cv2.imread(img_path)
+
+    # get original image dimensions
+    height = img.shape[0]
+    width = img.shape[1]
+
+    # new dimensions after rescaling/cropping
+    new_height = 480
+    new_width = 640
+
+    # replace 'png' extension with 'txt' and parse to collect original Annotations
+    annotation_path = img_path[:-3] + 'txt'
+    old_annotations, plate_chars = parse_annotation(annotation_path)
+
+    print(old_annotations[0])
+    # We need to set up coords in both image 'systems'
+    # the 'Old' coords refer to 1920x1080
+    # the 'New' coords refer to 640x480, or other new dimensions defined
+    old_centre_x = old_annotations[0][0] + (old_annotations[0][2] / 2)
+    old_centre_y = old_annotations[0][1] + (old_annotations[0][3] / 2)
+
+    old_x1 = int(old_centre_x - (new_width / 2) )
+    old_y1 = int(old_centre_y - (new_height / 2) )
+
+    # translate the old boxes into the new, smaller size
+    new_boxes = np.empty( [0,4], int)
+    for row in old_annotations:
+        new_x = row[0] - old_x1
+        new_y = row[1] - old_y1
+
+        new_boxes = np.append(new_boxes, np.array([[new_x, new_y, row[2], row[3]]]), axis=0)
+
+    # translate boxes into centered, percentage-sized ones
+    cent_boxes = np.empty([0,4], float)
+    for row in new_boxes:
+        new_cent_x = row[0] / new_width
+        new_cent_y = row[1] / new_height
+        new_cent_w = row[2] / new_width
+        new_cent_h = row[3] / new_height
+
+        cent_boxes = np.append(cent_boxes, np.array([[new_cent_x, new_cent_y, new_cent_w, new_cent_h]]), axis=0)
+
+    print(cent_boxes)
+
+    # crop the image
+    crop = img[old_y1: (old_y1+new_height), old_x1: (old_x1+new_width)]
+
+    return crop, cent_boxes
+
+def write_files(img, boxes):
+    """
+    write_files: Function to write the Image and its Annotation file
+
+    Inputs:
+        img (cv2 image): Cropped image to be written
+
+        boxes (array): locations of the detection boxes, in YOLOv5-friendly centered and scaled format
+
+    Outputs:
+            writes the cropped Image and Text to the output directory:
+            output directory / images / <image.png here>
+            output directory / labels / <label.txt here>        ## for car and palte labels only
+            output directory / labels_long / <label.txt here>   ## for car, plate and character labels
+    """
+
+    os.mkdir('data')
+
+    # write the cropped image to the new directory
+
+    #write the annotation file
+    with open(file_name[:-3] + 'txt', 'w') as f:
+        # convert to loop over rows
+        # first char, for label: incrimenter, write max of (inc, 2) as 2 is last char (for Character on Plate)
+
+#        f.write('0 ')
+        for i in cent_boxes[0]:
+            f.write(str(i) + ' ')
+        f.write('\n')
+
+#        f.write('1 ')
+        for i in cent_boxes[1]:
+            f.write(str(i) + ' ')
+
+        f.close()
+
+    # test the new crop and boxes
+#    draw_boxes(new_boxes, crop)
+
+    return
+
+
+label_dict = {
+    0 : 'car',
+    1 : 'plate',
+    2 : 'character'
+}
+
+
+
 
 #use the r character to read the string exactly as printed
 # otherwise Python will attempt to interpret the backslashes as special characters/commands
+# better to replace all the Backslashes with Forward Slashes - python works better with them
 test_path = r"C:\Users\bcarr\Documents\USD AAI\AAI 521 Computer Vision\UFPR-ALPR\UFPR-ALPR dataset\training\track0001\track0001[01].txt"
 
 test_img_path = r"C:\Users\bcarr\Documents\USD AAI\AAI 521 Computer Vision\UFPR-ALPR\UFPR-ALPR dataset\training\track0001\track0001[01].png"
 
-annotations, plate = parse_annotation(test_path)
+#annotations, plate = parse_annotation(test_path)
 
-draw_boxes(annotations, test_img_path)
+#draw_boxes(annotations, test_img_path)
+
+test_path2 = r"C:/Users/bcarr/Documents/USD AAI/AAI 521 Computer Vision/UFPR-ALPR/UFPR-ALPR dataset/training/track0001/"
+
+test_fn = r'track0001[01].png'
+
+convert_image_and_annotation(test_path2, None, test_fn)
+
+import os
+print(os.getcwd())
 
 """
 To do:
 
 1) Check box dimensions in a file -- DONE
-2) Check output format against YOLO requirements
+2) Check output format against YOLO requirements -- 
+    YOYO requires text format annotations, as percentages of the image dimensions (eg 0.1 for 10% of the image's height):
+        <class label as number> <x for box centre> <y for box centre> <w width of box> <h height of box>
+        eg: 0 0.5 0.6 0.3 0.2
+        
+    Structure is:
+        Test
+            Images
+                image files
+            Labels
+                annotation files
+        Train
+            Images
+                image files
+            Labels
+                annotation files
+    
+    Files should have the same names, just different extensions
 3) Check other license plate character lengths (6? 7? 8? other?)
+4) Convert annotation to new 'centered' YOLO format - DONE
+5) Crop images - DONE
+6) Finish image and annotation writing function -- in progress
+7) Run and iterate over all files
 """
 
 
