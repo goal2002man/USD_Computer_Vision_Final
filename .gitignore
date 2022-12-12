@@ -1,0 +1,21 @@
+*~
+# Windows
+*.user.*
+*.idea*
+*.log
+*.tlog
+*.cache
+*.obj
+*.sdf
+*.opensdf
+*.lastbuildstate
+*.unsuccessfulbuild
+*.suo
+*.res
+*.ipch
+*.manifest
+*.jpg
+*.png
+*.jpeg
+*.txt
+
