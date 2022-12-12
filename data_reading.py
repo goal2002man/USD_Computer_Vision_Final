@@ -13,6 +13,7 @@ import numpy as np
 import cv2
 import os
 from pathlib import Path
+import pandas as pd
 
 def parse_annotation(file_path):
     """
@@ -290,13 +291,68 @@ def convert_dataset(source_dir, new_dir = r'C:/Users/bcarr/Documents/GitHub/USD_
 
     return
 
-def crop_plate(image, boxes):
+def crop_plate(source_dir = r'C:/Users/bcarr/Documents/USD AAI/AAI 521 Computer Vision/UFPR-ALPR/UFPR-ALPR dataset',
+               output_dir = r'C:\Users\bcarr\Documents\GitHub\USD_Computer_Vision_Final'):
     """
     crop_plate: a function to crop out the plates ONLY
-    :param image:
-    :param boxes:
-    :return:
+
+    Inputs:
+        source_dir (string): the source directory for folders to be searched, with structure:
+            source_dir/training/ <run> / <images and annotation here>
+            source_dir/validation/ <run> / <images and annotation here>
+            source_dir/testing/ <run> / <images and annotation here>
+
+        image (cv2 image): the file of the image to be read and cropped
+
+        boxes (array): the bounding boxes from annotations
+            'old' full resolution format
+
+        plate (string): the string annotation for the plate
+
+    Outputs:
+        nil Returns
+        writes
+
     """
+
+    #set up output directory
+    os.chdir(output_dir + '/plates/')
+    #os.mkdir('plates')
+
+    #initialize pandas dataframe to store plates
+    plate_df = pd.DataFrame(columns=['file_name', 'plate_chars'])
+
+    #search for sub directories in source dir
+    sub_dirs = os.scandir(source_dir)
+    for dir in sub_dirs:
+        if dir.is_dir():
+            directory_list = os.scandir(dir.path)
+            for subdir in directory_list:
+                # get list of files
+                file_list = os.listdir(subdir.path)
+
+                #take first file
+                file_name = file_list[0]
+                text_name = file_name[:-3] + 'txt'
+                img_name = file_name[:-3] + 'png'
+
+                box, plate = parse_annotation(subdir.path +'/'+ text_name)
+
+                plate_df = plate_df.append({'file_name' : img_name, 'plate_chars' : plate}, ignore_index=True)
+
+                img = cv2.imread(subdir.path + '/' + img_name)
+
+                crop = [] #reset the Cropped image
+                crop = img[box[1][1] : (box[1][1] + box[1][3]), box[1][0]: (box[1][0] + box[1][2])]
+
+                cv2.imwrite(img_name, crop)
+
+    plate_df.to_csv('plate_chars.csv')
+
+
+
+
+#    print(sub_dirs)
 
     return
 
@@ -325,3 +381,6 @@ print(os.getcwd())
 # For building the dataset in the newly made directories above
 # Adjust pathways manually, as needed, for additional runs
 #convert_dataset(r"C:/Users/bcarr/Documents/USD AAI/AAI 521 Computer Vision/UFPR-ALPR/UFPR-ALPR dataset/testing")
+
+crop_plate()
+
